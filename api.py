@@ -151,7 +151,7 @@ def deleteAsset(immich_server_url, asset_id, api_key):
 
     try:
         response = requests.delete(url, headers=headers, data=payload)
-        if response.status_code == 204:
+        if response.status_code in [200, 204]:
             st.write(f"Successfully deleted asset with ID: {asset_id}")
             print(f"Successfully deleted asset with ID: {asset_id}")
             return True
@@ -225,3 +225,47 @@ def getVideoAndSave(asset_id, immich_server_url,api_key,save_directory):
     else:
         print(f"Failed to retrieve video for asset_id {asset_id}. Status Code: {response.status_code}, Content-Type: {response.headers.get('Content-Type')}")
         return None
+
+def deleteAssetsBulk(immich_server_url, asset_ids, api_key):
+    """
+    Delete multiple assets in bulk.
+    
+    Args:
+        immich_server_url (str): The base URL of the Immich server.
+        asset_ids (list): A list of asset IDs to delete.
+        api_key (str): The API key for authentication.
+    
+    Returns:
+        list: A list of asset IDs that were successfully deleted.
+    """
+    st.session_state['show_faiss_duplicate'] = False
+    url = f"{immich_server_url}/api/assets"
+    payload = json.dumps({
+        "force": True,
+        "ids": asset_ids
+    })
+    headers = {
+        'Content-Type': 'application/json',
+        'x-api-key': api_key
+    }
+
+    try:
+        response = requests.delete(url, headers=headers, data=payload)
+        if response.status_code in [200, 204]:
+            st.write(f"Successfully deleted assets with IDs: {', '.join(asset_ids)}")
+            print(f"Successfully deleted assets with IDs: {', '.join(asset_ids)}")
+            return asset_ids
+        else:
+            # Provide more detailed error feedback
+            try:
+                error_message = response.json().get('message', 'No additional error message provided.')
+            except ValueError:
+                error_message = 'Response content is not valid JSON.'
+            st.error(f"Failed to delete assets. Status code: {response.status_code}. Message: {error_message}")
+            print(f"Failed to delete assets. Status code: {response.status_code}. Message: {error_message}")
+            return []
+    except requests.RequestException as e:
+        # Handle request-related exceptions
+        st.error(f"Request failed: {str(e)}")
+        print(f"Request failed: {str(e)}")
+        return []

@@ -4,8 +4,8 @@ import os
 from api import fetchAssets
 from db import startup_db_configurations, startup_processed_assets_db, startup_processed_duplicate_faiss_db
 from startup import startup_sidebar
-from imageDuplicate import generate_db_duplicate,show_duplicate_photos_faiss,calculateFaissIndex
-
+from imageDuplicate import generate_db_duplicate, show_duplicate_photos_faiss, calculateFaissIndex, \
+    delete_duplicates_in_recovered_folder
 
 # Set the environment variable to allow multiple OpenMP libraries
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -84,6 +84,12 @@ def configure_sidebar():
             if st.button('Find duplicate video'):
                 st.info("Coming function")
 
+        # Add a new expander for mass deletion
+        st.markdown("---")
+        with st.expander("Mass Delete Duplicates", expanded=False):
+            if st.button('Delete all duplicates in /libraries/Recovered'):
+                st.session_state['delete_all_in_recovered'] = True
+
         st.markdown("---")
         # Display program version and additional data
         program_version = "v0.1.3"
@@ -91,27 +97,32 @@ def configure_sidebar():
         st.markdown(f"**Version:** {program_version}\n\n{additional_data}")
 
 def main():
-    #print(fetchAssets(immich_server_url, api_key,timeout, 'VIDEO'))
     setup_session_state()
     configure_sidebar()
     assets = None
 
     # Attempt to fetch assets if any asset-related operation is to be performed
-    if st.session_state['calculate_faiss'] or st.session_state['generate_db_duplicate'] or st.session_state['show_faiss_duplicate']:
-        assets = fetchAssets(immich_server_url, api_key,timeout, 'IMAGE')
+    if (st.session_state['calculate_faiss'] or
+            st.session_state['generate_db_duplicate'] or
+            st.session_state['show_faiss_duplicate'] or
+            st.session_state.get('delete_all_in_recovered', False)):
+        assets = fetchAssets(immich_server_url, api_key, timeout, 'IMAGE')
         if not assets:
             st.error("No assets found or failed to fetch assets.")
             return  # Stop further execution since there are no assets to process
-        
-        # Remove deleted assets from the assets list
-        if 'deleted_assets' in st.session_state:
-            assets = [asset for asset in assets if asset['id'] not in st.session_state['deleted_assets']]
 
+    # Handle mass deletion of duplicates in /libraries/Recovered
+    if st.session_state.get('delete_all_in_recovered', False):
+        delete_duplicates_in_recovered_folder(assets, immich_server_url, api_key)
+        # After deletion, reset the flag
+        st.session_state['delete_all_in_recovered'] = False
+
+    # Existing code for other functionalities...
     # Calculate the FAISS index if the corresponding flag is set
     if st.session_state['calculate_faiss'] and assets:
         calculateFaissIndex(
-            assets, 
-            immich_server_url, 
+            assets,
+            immich_server_url,
             api_key
         )
 
@@ -122,12 +133,13 @@ def main():
     # Show FAISS duplicate photos if the corresponding flag is set
     if st.session_state['show_faiss_duplicate'] and assets:
         show_duplicate_photos_faiss(
-            assets, st.session_state['limit'], 
+            assets, st.session_state['limit'],
             st.session_state['faiss_min_threshold'],
             st.session_state['faiss_max_threshold'],
             immich_server_url,
             api_key
         )
+
 
 if __name__ == "__main__":
     main()

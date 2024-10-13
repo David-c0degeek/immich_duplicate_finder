@@ -417,4 +417,75 @@ def show_duplicate_photos_faiss(assets, limit, min_threshold, max_threshold, imm
         progress_bar.progress(100)
     else:
         st.write("No duplicates found.")
+        
+def delete_duplicates_in_recovered_folder(assets, immich_server_url, api_key):
+    st.write("Starting mass deletion of duplicates in /libraries/Recovered...")
+
+    # Load duplicates from database
+    if not is_db_populated():
+        st.write("No duplicates found in the database.")
+        return
+
+    duplicates = load_duplicate_pairs(
+        min_threshold=st.session_state.get('faiss_min_threshold', 0.0),
+        max_threshold=st.session_state.get('faiss_max_threshold', 0.6)
+    )
+
+    if not duplicates:
+        st.write("No duplicates found.")
+        return
+
+    # Collect asset IDs in /libraries/Recovered
+    assets_in_recovered = set()
+    for dup_pair in duplicates:
+        asset_id_1, asset_id_2 = dup_pair
+        asset1_info = getAssetInfo(asset_id_1, assets)
+        asset2_info = getAssetInfo(asset_id_2, assets)
+
+        # Check if assets exist
+        if asset1_info:
+            original_path_1 = asset1_info[5]
+            if original_path_1.startswith('/libraries/Recovered'):
+                assets_in_recovered.add(asset_id_1)
+        if asset2_info:
+            original_path_2 = asset2_info[5]
+            if original_path_2.startswith('/libraries/Recovered'):
+                assets_in_recovered.add(asset_id_2)
+
+    if not assets_in_recovered:
+        st.write("No duplicates found in /libraries/Recovered.")
+        return
+
+    st.write(f"Found {len(assets_in_recovered)} assets to delete.")
+    st.write(f"Assets to delete: {assets_in_recovered}")
+
+    # Use a form to confirm deletion
+    with st.form(key='mass_delete_form'):
+        st.warning(f"Are you sure you want to delete {len(assets_in_recovered)} duplicates in /libraries/Recovered? This action cannot be undone.")
+        confirm = st.checkbox('Yes, delete all duplicates in /libraries/Recovered.')
+        submit_delete = st.form_submit_button('Delete duplicates')
+
+    # Handle form submission outside the form context
+    if submit_delete:
+        if confirm:
+            st.write("Deleting assets...")
+            deleted_asset_ids = []
+            for asset_id in assets_in_recovered:
+                st.write(f"Deleting asset ID: {asset_id}")
+                deletion_result = deleteAsset(immich_server_url, asset_id, api_key)
+                if deletion_result:
+                    deleted_asset_ids.append(asset_id)
+                else:
+                    st.error(f"Failed to delete asset with ID: {asset_id}")
+            if deleted_asset_ids:
+                # Update the duplicates database
+                remove_deleted_assets_from_db(deleted_asset_ids)
+                st.success(f"Deleted {len(deleted_asset_ids)} assets from /libraries/Recovered.")
+            else:
+                st.write("No assets were deleted.")
+            st.write("Deletion process completed.")
+            # Optionally, reset the flag
+            st.session_state['delete_all_in_recovered'] = False
+        else:
+            st.info('Please confirm deletion by checking the box above.')
 

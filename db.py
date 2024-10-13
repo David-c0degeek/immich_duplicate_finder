@@ -210,22 +210,32 @@ def is_db_populated():
 
 def remove_deleted_assets_from_db(deleted_asset_ids):
     """Remove entries from the duplicates table that involve deleted assets."""
+    if not deleted_asset_ids:
+        print("No assets to remove from duplicates DB.")
+        return
+
     try:
         conn = sqlite3.connect('duplicates.db')
         cursor = conn.cursor()
+
         # Prepare placeholders for SQL IN clause
         placeholders = ', '.join('?' for _ in deleted_asset_ids)
-        # Since we have two IN clauses, we need to supply the parameters twice
+
+        # Since we have two IN clauses, supply the asset IDs list twice
         query = f'''
             DELETE FROM duplicates
             WHERE vector_id1 IN ({placeholders}) OR vector_id2 IN ({placeholders})
         '''
-        # Execute the query with the deleted_asset_ids repeated for both placeholders
-        params = deleted_asset_ids + deleted_asset_ids  # Concatenate the list with itself
+
+        # Execute the query with the asset IDs repeated for both clauses
+        params = deleted_asset_ids + deleted_asset_ids
         cursor.execute(query, params)
         conn.commit()
+        print(f"Removed {len(deleted_asset_ids)} assets from duplicates DB.")
     except Exception as e:
         print("Error removing deleted assets from duplicates db:", e)
     finally:
         conn.close()
+
+
 
